@@ -1,3 +1,11 @@
+# Temporal Dirs
+#build
+#include
+#lib
+shell.bat
+TODO.txt
+.vs
+
 # Prerequisites
 *.d
 
@@ -6,10 +14,12 @@
 *.lo
 *.o
 *.obj
+*.pdb
 
 # Precompiled Headers
 *.gch
 *.pch
+/include/SDL2/*.h
 
 # Compiled Dynamic libraries
 *.so
@@ -30,3 +40,6 @@
 *.exe
 *.out
 *.app
+/include/SDL2/*.cmake
+/include/SDL2/*.in
+/include/SDL2/*.orig
