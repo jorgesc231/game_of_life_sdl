@@ -29,8 +29,22 @@ y tambien copiar "SDL2.dll" a la carpeta "build" de proyecto
 ### Compilar
 
 - Abrir "x64 Native Tools Command Prompt for VS 2019" que se debio haber instalado con Visual Studio
-- Ir a la carpeta donde esta el proyecto y ejecutar
+
+- Ir a la carpeta donde esta el proyecto y ejecutar:
 
 	build.bat
 
 Esto deberia generar el archivo "Game_of_life.exe" en la carpeta build.
+
+
+### Instrucciones de uso
+
+- Click primario      = Agregar
+- Click segundario    = Quitar
+
+- Pausar              = Espacio
+- Flecha hacia arriba = Aumenta la velocidad
+- Flecha hacia abajo  = disminuir la velocidad
+- Enter + Pausa       = Avanzar paso a paso
+- DELETE + Pausa      = Limpiar
+- ESCAPE              = Salir
