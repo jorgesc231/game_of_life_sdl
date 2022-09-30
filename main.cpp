@@ -3,13 +3,24 @@
 
 #include <stdio.h>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #define FPS 60
 #define FRAME_TARGET_TIME (1000.0f / FPS)    // Cuando va a demorar en procesar un frame
 
-#define DEFAULT_WINDOW_WIDTH 600
-#define DEFAULT_WINDOW_HEIGHT 600
+#define DEFAULT_WINDOW_WIDTH 800
+#define DEFAULT_WINDOW_HEIGHT 800
 #define CELDAS_X 50
 #define CELDAS_Y 50
+
+#ifndef __EMSCRIPTEN__
+#define FONT_PATH "assets/OpenSans-Bold.ttf"
+#else
+#define FONT_PATH "build/assets/OpenSans-Bold.ttf"
+#endif
+
 
 // Estado de la pulsacion de una tecla
 enum key_state
@@ -62,9 +73,20 @@ SDL_Texture *text_texture = NULL;
 int text_w = 0;
 int text_h = 0;
 
+int prev_time = 0;
+int keycount = 0;
+
 bool game_is_running = false;
 bool show_game_state = false;
 bool should_reinit = false;
+
+int suma = 0;
+
+SDL_Rect celda = {0, 0, state.celda_width, state.celda_height};
+	
+// Estado de las celdas. Vivas = 1; Muertas = 0;
+bool estado[CELDAS_X][CELDAS_Y] = { 0 };
+bool estado_copia[CELDAS_X][CELDAS_Y] = { 0 };
 
 // Keyboard state
 Uint8 *last_state;
@@ -79,10 +101,40 @@ int mouse_y = 0;
 int selected_cell_x = 0;
 int selected_cell_y = 0;
 
+void main_loop();
+
+bool return_down = false;
+bool space_down = false;
+bool up_down = false;
+bool down_down = false;
+bool backspace_down = false;
+bool f1_down = false;
+bool return_pressed = false;
+bool space_pressed = false;
+bool up_pressed = false;
+bool down_pressed = false;
+bool backspace_pressed = false;
+bool f1_pressed = false;
 
 
 int get_key_state(SDL_Keycode key_code)
 {
+#ifdef __EMSCRIPTEN__
+    if (key_code == SDL_SCANCODE_RETURN && return_pressed)
+        return just_pressed;
+    if (key_code == SDL_SCANCODE_SPACE && space_pressed)
+        return just_pressed;
+    if (key_code == SDL_SCANCODE_UP && up_pressed)
+        return just_pressed;
+    if (key_code == SDL_SCANCODE_DOWN && down_pressed)
+        return just_pressed;
+    if (key_code == SDL_SCANCODE_BACKSPACE && backspace_pressed)
+        return just_pressed;
+    if (key_code == SDL_SCANCODE_F1 && f1_pressed)
+        return just_pressed;
+
+    else return still_released;
+#else
     if (last_state[key_code])
     {
         if (current_state[key_code]) return still_pressed;
@@ -91,6 +143,7 @@ int get_key_state(SDL_Keycode key_code)
         if (current_state[key_code]) return just_pressed;
         else return still_released;
     }
+#endif
 }
 
 // Funcion para calcular el modulo
@@ -117,20 +170,28 @@ int main(int argc, char *argv[])
 	// Crear el renderer
 	Uint32 render_flags = SDL_RENDERER_ACCELERATED;
 	renderer = SDL_CreateRenderer(window, -1, render_flags);
-    
-    // Initialize SDL_ttf and load fonts
-    if (TTF_Init() == -1) return -1;
-    
-    font = TTF_OpenFont("OpenSans-Bold.ttf", 32 );
-    if (!font) return -1;
-    
-    normal_font = TTF_OpenFont("OpenSans-Bold.ttf", 16 );
-    if (!normal_font) return -1;
-    
+       
 	if (window && renderer)  game_is_running = true;
 	else return -1;
+
+    // Initialize SDL_ttf and load fonts
+    if (TTF_Init() == -1) return -1;
+
+    font = TTF_OpenFont(FONT_PATH, 32);
+    if (!font)
+    {
+        printf("Error al cargar la fuente 32\n%s\n", TTF_GetError());
+        return -1;
+    }
+
+    normal_font = TTF_OpenFont(FONT_PATH, 16);
+    if (!normal_font)
+    {
+        printf("Error al cargar la fuente 16\n%s\n", TTF_GetError());
+        return -1;
+    }
     
-	int suma = 0;
+
     
     state.pausa = 0;
     state.avanzar = 0;
@@ -142,13 +203,9 @@ int main(int argc, char *argv[])
     // Dimensiones de la celda
     state.celda_width = window_width / CELDAS_X;
     state.celda_height = window_height / CELDAS_Y;
-	
-	SDL_Rect celda = {0, 0, state.celda_width, state.celda_height};
-	
-	// Estado de las celdas. Vivas = 1; Muertas = 0;
-	bool estado[CELDAS_X][CELDAS_Y] = { 0 };
-	bool estado_copia[CELDAS_X][CELDAS_Y] = { 0 };
-    
+
+    celda = { 0, 0, state.celda_width, state.celda_height };
+	  
     
 	// Automata palo
 	estado[5][3] = 1;
@@ -163,12 +220,30 @@ int main(int argc, char *argv[])
 	estado[20][23] = 1;
     
     
-    int prev_time = SDL_GetTicks();
-    int keycount = 0;
+    prev_time = SDL_GetTicks();
+    keycount = 0;
     
-	while (game_is_running)
-	{
-        // Actualiza los estados del teclado
+    if (game_is_running)
+    {
+#ifndef __EMSCRIPTEN__
+        main_loop();
+#endif
+
+#ifdef __EMSCRIPTEN__
+        emscripten_set_main_loop(main_loop, 0, 0);
+#endif
+    }
+   
+	return 0;
+}
+
+void main_loop()
+{
+#ifndef __EMSCRIPTEN__
+    while (game_is_running)
+    {
+#endif
+        // Actualiza el estado del teclado
         if (last_state == NULL && current_state == NULL)
         {
             current_state = SDL_GetKeyboardState(&keycount);
@@ -182,18 +257,81 @@ int main(int argc, char *argv[])
             for (int counter = 0; counter <= keycount; counter++)
                 last_state[counter] = current_state[counter];
         }
+
         
         SDL_Event event;
         
-		// Procesa los eventos
-		while (SDL_PollEvent(&event))
-		{
-			switch (event.type)
-			{
-				case SDL_QUIT:
-				{
-					game_is_running = false;
-				} break;
+        // Procesa los eventos
+        while (SDL_PollEvent(&event))
+        {
+            switch (event.type)
+            {
+                case SDL_QUIT:
+                {
+                    game_is_running = false;
+                } break;
+
+                case SDL_KEYDOWN:
+                {
+                    if (event.key.keysym.sym == SDLK_RETURN)
+                        return_down = true;
+
+                    if (event.key.keysym.sym == SDLK_SPACE)
+                        space_down = true;
+
+                    if (event.key.keysym.sym == SDLK_UP)
+                        up_down = true;
+
+                    if (event.key.keysym.sym == SDLK_DOWN)
+                        down_down = true;
+
+                    if (event.key.keysym.sym == SDLK_BACKSPACE)
+                        backspace_down = true;
+
+                    if (event.key.keysym.sym == SDLK_F1)
+                        f1_down = true;
+                
+                } break;
+
+                case SDL_KEYUP:
+                {
+                    if (event.key.keysym.sym == SDLK_RETURN)
+                    {
+                        return_down = false;
+                        return_pressed = true;
+                    }
+
+                    if (event.key.keysym.sym == SDLK_SPACE)
+                    {
+                        space_down = false;
+                        space_pressed = true;
+                    }
+
+                    if (event.key.keysym.sym == SDLK_UP)
+                    {
+                        up_down = false;
+                        up_pressed = true;
+                    }
+
+                    if (event.key.keysym.sym == SDLK_DOWN)
+                    {
+                        down_down = false;
+                        down_pressed = true;
+                    }
+
+                    if (event.key.keysym.sym == SDLK_BACKSPACE)
+                    {
+                        backspace_down = false;
+                        backspace_pressed = true;
+                    }
+
+                    if (event.key.keysym.sym == SDLK_F1)
+                    {
+                        f1_down = false;
+                        f1_pressed = true;
+                    }
+
+                } break;
                 
                 case SDL_MOUSEMOTION:
                 {
@@ -245,22 +383,22 @@ int main(int argc, char *argv[])
                         }
                     }
                 } break;
-			}
-		}
+            }
+        }
         
         
-		// Bloqueo de FPS (no muy preciso)
-		int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - prev_time);
+        // Bloqueo de FPS (no muy preciso)
+        int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - prev_time);
 		
-		if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
-		{
+        if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
+        {
             // TODO: Esto no es muy preciso...
-			SDL_Delay (time_to_wait);
-		}
+            SDL_Delay (time_to_wait);
+        }
 		
         int current_time = SDL_GetTicks();
-		float delta_time = (float)(current_time - prev_time) / 1000.0f; // elapsed time
-		prev_time = current_time;
+        float delta_time = (float)(current_time - prev_time) / 1000.0f; // elapsed time
+        prev_time = current_time;
 		
         
         if (get_key_state(SDL_SCANCODE_SPACE) == just_pressed) state.pausa = !state.pausa;
@@ -284,15 +422,15 @@ int main(int argc, char *argv[])
         if (state.update_step >= 1.0f) state.update_step = 1.0f;
         if (state.update_step <= 0.02f) state.update_step = 0.02f;
         
-		// Copia del estado actual del juego
-		for (int x = 0; x < CELDAS_X; x++)
-		{
-			for (int y = 0; y < CELDAS_Y; y++)
-			{
-				estado_copia[x][y] = estado[x][y];
-				if (state.limpiar) estado_copia[x][y] = 0;
-			}
-		}
+        // Copia del estado actual del juego
+        for (int x = 0; x < CELDAS_X; x++)
+        {
+            for (int y = 0; y < CELDAS_Y; y++)
+            {
+                estado_copia[x][y] = estado[x][y];
+                if (state.limpiar) estado_copia[x][y] = 0;
+            }
+        }
         
         // Para que no siga subiendo por siempre y termine por desbordarse
         if (state.tiempo_total >= 30.0f) state.tiempo_total = 0.0f;
@@ -306,63 +444,63 @@ int main(int argc, char *argv[])
             
             state.count++;
             
-			for (int x = 0; x < CELDAS_X; x++)
-			{
-				for (int y = 0; y < CELDAS_Y; y++)
-				{
-					// Calculamos el numero de vecinos cercanos
-					suma = estado[mod((x - 1), CELDAS_X)][mod((y - 1), CELDAS_Y)] + 
-						estado[mod(x, CELDAS_X)][mod(y - 1, CELDAS_Y)] + 
-						estado[mod(x + 1, CELDAS_X)][mod(y - 1, CELDAS_Y)] + 
-						estado[mod(x - 1, CELDAS_X)][mod(y, CELDAS_Y)] + 
-						estado[mod(x + 1, CELDAS_X)][mod(y, CELDAS_Y)] + 
-						estado[mod(x - 1, CELDAS_X)][mod(y + 1, CELDAS_Y)] + 
-						estado[mod(x, CELDAS_X)][mod(y + 1, CELDAS_Y)] + 
-						estado[mod(x + 1, CELDAS_X)][mod(y + 1, CELDAS_Y)];
+            for (int x = 0; x < CELDAS_X; x++)
+            {
+                for (int y = 0; y < CELDAS_Y; y++)
+                {
+                    // Calculamos el numero de vecinos cercanos
+                    suma = estado[mod((x - 1), CELDAS_X)][mod((y - 1), CELDAS_Y)] + 
+                        estado[mod(x, CELDAS_X)][mod(y - 1, CELDAS_Y)] + 
+                        estado[mod(x + 1, CELDAS_X)][mod(y - 1, CELDAS_Y)] + 
+                        estado[mod(x - 1, CELDAS_X)][mod(y, CELDAS_Y)] + 
+                        estado[mod(x + 1, CELDAS_X)][mod(y, CELDAS_Y)] + 
+                        estado[mod(x - 1, CELDAS_X)][mod(y + 1, CELDAS_Y)] + 
+                        estado[mod(x, CELDAS_X)][mod(y + 1, CELDAS_Y)] + 
+                        estado[mod(x + 1, CELDAS_X)][mod(y + 1, CELDAS_Y)];
 					
 					
-					// Regla 1: Una celda muerta con exactamente 3 vecinas vivas, "revive".
-					if (estado[x][y] == 0 && suma == 3) 
-						estado_copia[x][y] = 1;
+                    // Regla 1: Una celda muerta con exactamente 3 vecinas vivas, "revive".
+                    if (estado[x][y] == 0 && suma == 3) 
+                        estado_copia[x][y] = 1;
 					
-					// Regla 2: Una celda viva con menos de 2 o mas de 3 vecinas vivas, "muere".
-					if (estado[x][y] == 1 && (suma < 2 || suma > 3)) 
-						estado_copia[x][y] = 0;
-				}
-			}
-		}
+                    // Regla 2: Una celda viva con menos de 2 o mas de 3 vecinas vivas, "muere".
+                    if (estado[x][y] == 1 && (suma < 2 || suma > 3)) 
+                        estado_copia[x][y] = 0;
+                }
+            }
+        }
         
         // Render
-		SDL_SetRenderDrawColor (renderer, 0, 0, 0, 255);
-		SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor (renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
 		
         // Empieza a dibujar
         
         // Dibuja el estado cada fotograma
-		for (int x = 0; x < CELDAS_X; x++)
-		{
-			for (int y = 0; y < CELDAS_Y; y++)
-			{
-				celda.x = state.celda_width * x;
-				celda.y = state.celda_height * y;
+        for (int x = 0; x < CELDAS_X; x++)
+        {
+            for (int y = 0; y < CELDAS_Y; y++)
+            {
+                celda.x = state.celda_width * x;
+                celda.y = state.celda_height * y;
 				
-				// Dibujado de la celda para cada par de x e y
-				if (estado_copia[x][y] == 0)
-				{
-					SDL_SetRenderDrawColor (renderer, 155, 155, 155, 255);
-					SDL_RenderDrawRect(renderer, &celda);
+                // Dibujado de la celda para cada par de x e y
+                if (estado_copia[x][y] == 0)
+                {
+                    SDL_SetRenderDrawColor (renderer, 155, 155, 155, 255);
+                    SDL_RenderDrawRect(renderer, &celda);
                     
                     // Optimizar usando:
                     // int SDL_RenderDrawRects(SDL_Renderer * renderer, const SDL_Rect * rects, int count);
-				} else {
-					SDL_SetRenderDrawColor (renderer, 255, 255, 255, 255);
-					SDL_RenderFillRect(renderer, &celda);
+                } else {
+                    SDL_SetRenderDrawColor (renderer, 255, 255, 255, 255);
+                    SDL_RenderFillRect(renderer, &celda);
                     
                     // Optimizar usando:
                     // int SDL_RenderFillRects(SDL_Renderer * renderer, const SDL_Rect * rects, int count);
-				}
-			}
-		}
+                }
+            }
+        }
         
         if (state.pausa)
         {
@@ -408,12 +546,20 @@ int main(int argc, char *argv[])
         
         if (get_key_state(SDL_SCANCODE_ESCAPE) == just_pressed) game_is_running = false;
         
+
+        return_pressed = false;
+        space_pressed = false;
+        up_pressed = false;
+        down_pressed = false;
+        backspace_pressed = false;
+        f1_pressed = false;
         
-		// Termina de dibujar
-		SDL_RenderPresent(renderer);
-	}
+        // Termina de dibujar
+        SDL_RenderPresent(renderer);
     
-	return 0;
+#ifndef __EMSCRIPTEN__
+    }
+#endif
 }
 
 

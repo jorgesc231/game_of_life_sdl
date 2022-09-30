@@ -1,0 +1,1 @@
+emcc main.cpp --emrun --shell-file web_build/new_shell.html --preload-file build/assets/ -s USE_SDL=2 -s USE_SDL_TTF=2 -o web_build/index.html
